@@ -1,0 +1,43 @@
+# 忽略编译生成的文件
+*.o
+*.out
+*.exe
+
+# 忽略IDE和编辑器生成的文件
+.vscode/
+.idea/
+*.iml
+
+# 忽略依赖和包管理器生成的文件
+node_modules/
+vendor/
+
+# 忽略日志文件
+*.log
+
+# 忽略临时文件和缓存
+*.tmp
+*.swp
+*.swo
+.DS_Store
+
+# 忽略敏感信息
+.env
+
+# 忽略编译配置文件
+build/
+
+# 忽略备份文件
+*.bak
+*.backup
+
+# 忽略系统文件
+Thumbs.db
+Desktop.ini
+
+# 忽略其他自定义规则
+# ...
+musicpiece/
+outputpiece/
+__pycache__/
+.ipynb_checkpoints/
