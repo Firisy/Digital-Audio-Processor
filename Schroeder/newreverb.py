@@ -6,10 +6,15 @@ class filter:
         self.b=b
         self.a=a
         self.zi = signal.lfiltic(self.b,self.a,[0])
+    
     def process(self,input):
         output,self.zi=signal.lfilter(self.b,self.a,input,axis=-1,zi=self.zi)
         return output
     
+    def update_filter(self,b,a):
+        self.b = b
+        self.a = a
+
 class SATREV:
     def __init__(self) -> None:    
         self.FBCF_delay=[901,778,1011,1123]
@@ -126,20 +131,18 @@ class Freeverb:
         for i in range(8):
             self.LBCFL_b[i][-2] = 1
             self.LBCFL_b[i][-1] = -self.damp
-        for i in range(8):
             self.LBCFL_a[i][0] = 1
             self.LBCFL_a[i][1] = -self.damp
             self.LBCFL_a[i][-1] = -self.roomsize*(1-self.damp)
 
         self.LBCFLs =[filter(self.LBCFL_b[i],self.LBCFL_a[i]) for i in range(8)]
         
-        self.LBCFR_b=[np.zeros(delay+2+stereospread) for delay in self.LBCF_delay]
-        self.LBCFR_a=[np.zeros(delay+1+stereospread) for delay in self.LBCF_delay]
+        self.LBCFR_b=[np.zeros(delay+2+self.stereospread) for delay in self.LBCF_delay]
+        self.LBCFR_a=[np.zeros(delay+1+self.stereospread) for delay in self.LBCF_delay]
         
         for i in range(8):
             self.LBCFR_b[i][-2] = 1
             self.LBCFR_b[i][-1] = -self.damp
-        for i in range(8):
             self.LBCFR_a[i][0] = 1
             self.LBCFR_a[i][1] = -self.damp
             self.LBCFR_a[i][-1] = -self.roomsize*(1-self.damp)
@@ -154,21 +157,19 @@ class Freeverb:
         for i in range(4):
             self.APL_b[i][0] = -self.AP_g
             self.APL_b[i][-1] = 1
-        for i in range(4):
             self.APL_a[i][0] = 1
             self.APL_a[i][-1] = -self.AP_g
 
         self.APLs =[filter(self.APL_b[i],self.APL_a[i]) for i in range(4)]
         
-        self.APR_b=[np.zeros(delay+1+stereospread) for delay in self.AP_delay]
-        self.APR_a=[np.zeros(delay+1+stereospread) for delay in self.AP_delay]
+        self.APR_b=[np.zeros(delay+1+self.stereospread) for delay in self.AP_delay]
+        self.APR_a=[np.zeros(delay+1+self.stereospread) for delay in self.AP_delay]
         
         for i in range(4):
-            self.APR_b[i][0] = -self.gain
+            self.APR_b[i][0] = -self.AP_g
             self.APR_b[i][-1] = 1
-        for i in range(4):
             self.APR_a[i][0] = 1
-            self.APR_a[i][-1] = -self.gain
+            self.APR_a[i][-1] = -self.AP_g
         
         self.APRs =[filter(self.APR_b[i],self.APR_a[i]) for i in range(4)]
     
@@ -186,6 +187,57 @@ class Freeverb:
             output[:,1] = APR.process(output[:,1])
         self.output = (input * self.dry) + np.dot(output,self.wetmat) 
         return output
+    
+    def update_Freeverb(self, dry=None, damp=None, wet=None, roomsize=None, stereospread=None, gain=None, width=None, AP_g=None):
+        if dry is not None:
+            self.dry = dry * 2
+        if damp is not None:
+            self.damp = damp * 0.4
+        if wet is not None:
+            self.wet = wet * 3
+            self.wet1 = self.wet * (self.width / 2 + 0.5)
+            self.wet2 = self.wet * ((1 - self.width) / 2)
+            self.wetmat = np.array([[self.wet1, self.wet2], [self.wet2, self.wet1]])
+        if roomsize is not None:
+            if roomsize > 1:
+                roomsize = 1
+            self.roomsize = roomsize * 0.28 + 0.7
+        if stereospread is not None:
+            self.stereospread = stereospread
+        if gain is not None:
+            self.gain = gain
+        if width is not None:
+            self.width = width
+            self.wet1 = self.wet * (self.width / 2 + 0.5)
+            self.wet2 = self.wet * ((1 - self.width) / 2)
+            self.wetmat = np.array([[self.wet1, self.wet2], [self.wet2, self.wet1]])
+        if AP_g is not None:
+            self.AP_g = AP_g
+        if damp is not None or roomsize is not None:
+            # 更新LBCFL的参数
+            for i in range(8):
+                self.LBCFL_b[i][-1] = -self.damp
+                self.LBCFL_a[i][1] = -self.damp
+                self.LBCFL_a[i][-1] = -self.roomsize * (1 - self.damp)
+                self.LBCFLs[i].update_filter(self.LBCFL_b[i],self.LBCFL_a[i])
+            # 更新LBCFR的参数
+            for i in range(8):
+                self.LBCFR_b[i][-1] = -self.damp
+                self.LBCFR_a[i][1] = -self.damp
+                self.LBCFR_a[i][-1] = -self.roomsize * (1 - self.damp)
+                self.LBCFRs[i].update_filter(self.LBCFR_b[i],self.LBCFR_a[i])
+        if AP_g is not None:
+            # 更新APL的参数
+            for i in range(4):
+                self.APL_b[i][0] = -self.AP_g
+                self.APL_a[i][-1] = -self.AP_g
+                self.APLs[i].update_filter(self.APL_b[i],self.APL_a[i])
+            # 更新APR的参数
+            for i in range(4):
+                self.APR_b[i][0] = -self.AP_g
+                self.APR_a[i][-1] = -self.AP_g
+                self.APRs[i].update_filter(self.APR_b[i],self.APR_a[i])
+            
 
 
         
